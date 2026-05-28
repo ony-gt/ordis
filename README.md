@@ -1,4 +1,4 @@
-# fluxerbot
+# Ordis
 
 A multipurpose Fluxer bot built with [fluxer.py](https://github.com/akarealemil/fluxer.py).
 
