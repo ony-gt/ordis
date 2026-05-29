@@ -80,7 +80,7 @@ class Moderation(Cog):
     @has_permission(Permissions.MANAGE_ROLES)
     async def mute(self, ctx, target: str, *, reason: str = "No reason provided"):
         uid = _parse_id(target)
-        roles = await self.bot.http.get_guild_roles(ctx.guild.id)
+        roles = await self.bot._http.get_guild_roles(ctx.guild.id)
         muted_role = next((r for r in roles if r.get("name") == "Muted"), None)
         if not muted_role:
             await ctx.channel.send(
@@ -88,7 +88,7 @@ class Moderation(Cog):
             )
             return
         try:
-            await self.bot.http.add_guild_member_role(
+            await self.bot._http.add_guild_member_role(
                 ctx.guild.id, uid, int(muted_role["id"])
             )
             await ctx.channel.send(f"Muted <@{uid}>. Reason: {reason}")
@@ -102,13 +102,13 @@ class Moderation(Cog):
     @has_permission(Permissions.MANAGE_ROLES)
     async def unmute(self, ctx, target: str):
         uid = _parse_id(target)
-        roles = await self.bot.http.get_guild_roles(ctx.guild.id)
+        roles = await self.bot._http.get_guild_roles(ctx.guild.id)
         muted_role = next((r for r in roles if r.get("name") == "Muted"), None)
         if not muted_role:
             await ctx.channel.send("No 'Muted' role found.")
             return
         try:
-            await self.bot.http.remove_guild_member_role(
+            await self.bot._http.remove_guild_member_role(
                 ctx.guild.id, uid, int(muted_role["id"])
             )
             await ctx.channel.send(f"Unmuted <@{uid}>.")
@@ -165,37 +165,36 @@ class Moderation(Cog):
     # -------------------------------------------------------------------------
     # purge  -- bulk delete up to 100 messages in the current channel
     # -------------------------------------------------------------------------
-    @Cog.command(name="purge")
-    @has_permission(Permissions.MANAGE_MESSAGES)
-    async def purge(self, ctx, amount: int):
-        if not 1 <= amount <= 100:
-            await ctx.channel.send("Amount must be between 1 and 100.")
-            return
-        try:
-            # fetch one extra to filter out the command message itself
-            messages = await self.bot.http.get_channel_messages(
-                ctx.channel.id, limit=amount + 1
-            )
-            ids = [
-                int(m["id"])
-                for m in messages
-                if str(m["id"]) != str(ctx.message.id)
-            ][:amount]
-
-            if not ids:
-                await ctx.channel.send("Nothing to delete.")
-                return
-
-            if len(ids) == 1:
-                await self.bot.http.delete_message(ctx.channel.id, ids[0])
-            else:
-                await self.bot.http.bulk_delete_messages(ctx.channel.id, ids)
-
-            note = await ctx.channel.send(f"Deleted {len(ids)} message(s).")
-            await asyncio.sleep(4)
-            await note.delete()
-
-        except fluxer.FluxerException as exc:
+    @Cog.command(name="purge")  
+    @has_permission(Permissions.MANAGE_MESSAGES)  
+    async def purge(self, ctx, amount: int):  
+        if not 1 <= amount <= 100:  
+            await ctx.channel.send("Amount must be between 1 and 100.")  
+            return  
+        try:    
+            messages = await self.bot._http.get_messages(  
+                ctx.channel.id, limit=amount + 1  
+            )  
+            ids = [  
+                str(m["id"]) 
+                for m in messages  
+                if str(m["id"]) != str(ctx.id)
+            ][:amount]  
+  
+            if not ids:  
+                await ctx.channel.send("Nothing to delete.")  
+                return  
+  
+            if len(ids) == 1:  
+                await self.bot._http.delete_message(ctx.channel.id, ids[0])  
+            else:  
+                await self.bot._http.delete_messages(ctx.channel.id, ids)  
+  
+            note = await ctx.channel.send(f"Deleted {len(ids)} message(s).")  
+            await asyncio.sleep(4)  
+            await note.delete()  
+  
+        except fluxer.FluxerException as exc:  
             await ctx.channel.send(f"Purge failed: {exc}")
 
     # -------------------------------------------------------------------------
@@ -207,7 +206,7 @@ class Moderation(Cog):
         # deny bit for SEND_MESSAGES (0x800) on the @everyone role
         everyone_id = ctx.guild.id
         try:
-            await self.bot.http.edit_channel_permissions(
+            await self.bot._http.edit_channel_permissions(
                 ctx.channel.id,
                 everyone_id,
                 allow=0,
@@ -226,9 +225,12 @@ class Moderation(Cog):
     async def unlock(self, ctx):
         everyone_id = ctx.guild.id
         try:
-            # delete the override entirely, reverting to default permissions
-            await self.bot.http.delete_channel_permissions(
-                ctx.channel.id, everyone_id
+            await self.bot._http.edit_channel_permissions(
+                ctx.channel.id,
+                everyone_id,
+                allow=Permissions.SEND_MESSAGES.value,
+                deny=0,
+                type=0,
             )
             await ctx.channel.send("Channel unlocked.")
         except fluxer.FluxerException as exc:
@@ -237,21 +239,21 @@ class Moderation(Cog):
     # -------------------------------------------------------------------------
     # slowmode  -- set channel slowmode in seconds (0 to disable)
     # -------------------------------------------------------------------------
-    @Cog.command(name="slowmode")
-    @has_permission(Permissions.MANAGE_CHANNELS)
-    async def slowmode(self, ctx, seconds: int):
-        if not 0 <= seconds <= 21600:
-            await ctx.channel.send("Slowmode must be 0-21600 seconds.")
-            return
-        try:
-            await self.bot.http.edit_channel(
-                ctx.channel.id, rate_limit_per_user=seconds
-            )
-            if seconds == 0:
-                await ctx.channel.send("Slowmode disabled.")
-            else:
-                await ctx.channel.send(f"Slowmode set to {seconds}s.")
-        except fluxer.FluxerException as exc:
+    @Cog.command(name="slowmode")  
+    @has_permission(Permissions.MANAGE_CHANNELS)  
+    async def slowmode(self, ctx, seconds: int):  
+        if not 0 <= seconds <= 21600:  
+            await ctx.channel.send("Slowmode must be 0-21600 seconds.")  
+            return  
+        try:  
+            await self.bot._http.modify_channel(  
+                ctx.channel.id, rate_limit_per_user=seconds  
+            )  
+            if seconds == 0:  
+                await ctx.channel.send("Slowmode disabled.")  
+            else:  
+                await ctx.channel.send(f"Slowmode set to {seconds}s.")  
+        except fluxer.FluxerException as exc:  
             await ctx.channel.send(f"Failed to set slowmode: {exc}")
 
 
