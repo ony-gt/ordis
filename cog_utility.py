@@ -3,10 +3,6 @@ import time
 import fluxer
 from fluxer import Cog
 
-# avatar CDN base -- adjust if Fluxer changes their CDN path
-CDN_BASE = "https://cdn.fluxer.app"
-
-
 def _parse_id(raw: str) -> int:
     return int(raw.strip().lstrip("<@!").rstrip(">"))
 
@@ -19,10 +15,17 @@ class Utility(Cog):
     # -------------------------------------------------------------------------
     # ping
     # -------------------------------------------------------------------------
-    @Cog.command(name="ping")
-    async def ping(self, ctx):
-        latency = round(self.bot.latency * 1000)
-        await ctx.channel.send(f"Pong! `{latency}ms`")
+    @Cog.command(name="ping")  
+    async def ping(self, ctx):  
+        gateway = self.bot._gateway  
+        if gateway and hasattr(gateway, "_heartbeat_interval"):  
+            latency = round(gateway._heartbeat_interval * 1000)  
+        else:  
+            latency = "Unknown"
+        if isinstance(latency, (int, float)):  
+            await ctx.channel.send(f"Pong! `{latency}ms`")  
+        else:  
+            await ctx.channel.send("Pong! (latency unavailable)")
 
     # -------------------------------------------------------------------------
     # uptime
@@ -37,70 +40,70 @@ class Utility(Cog):
     # -------------------------------------------------------------------------
     # serverinfo
     # -------------------------------------------------------------------------
-    @Cog.command(name="serverinfo")
-    async def serverinfo(self, ctx):
-        if not ctx.guild:
-            await ctx.channel.send("Use this command inside a server.")
+    @Cog.command(name="serverinfo")  
+    async def serverinfo(self, ctx):  
+        if not ctx.guild:  
+            await ctx.channel.send("Use this command inside a server.")  
             return
-        g = ctx.guild
-        embed = fluxer.Embed(title=g.name, color=0x5865F2)
-        embed.add_field(name="ID", value=str(g.id), inline=True)
-        embed.add_field(name="Owner", value=f"<@{g.owner_id}>", inline=True)
-        embed.add_field(name="Members", value=str(g.member_count), inline=True)
-        if getattr(g, "icon", None):
-            embed.set_thumbnail(url=f"{CDN_BASE}/icons/{g.id}/{g.icon}.png")
+        g = await self.bot.fetch_guild(str(ctx.guild.id))  
+        embed = fluxer.Embed(title=g.name, color=0x5865F2)  
+        embed.add_field(name="ID", value=str(g.id), inline=True)  
+        embed.add_field(name="Owner", value=f"<@{g.owner_id}>", inline=True)  
+        embed.add_field(name="Members", value=str(g.member_count), inline=True)  
+        if g.icon_url:  
+            embed.set_thumbnail(url=g.icon_url)  
         await ctx.channel.send(embed=embed)
 
     # -------------------------------------------------------------------------
     # userinfo  -- defaults to the caller if no target is given
     # -------------------------------------------------------------------------
-    @Cog.command(name="userinfo")
-    async def userinfo(self, ctx, target: str = None):
-        if not ctx.guild:
-            await ctx.channel.send("Use this command inside a server.")
-            return
-        uid = _parse_id(target) if target else ctx.author.id
-        try:
-            member = await self.bot.http.get_guild_member(ctx.guild.id, uid)
-        except fluxer.FluxerException:
-            await ctx.channel.send("Could not find that member.")
-            return
-        user = member.get("user", {})
-        username = user.get("username", str(uid))
-        discriminator = user.get("discriminator", "0")
-        joined_at = member.get("joined_at", "Unknown")
-        display = f"{username}#{discriminator}" if discriminator != "0" else username
-        embed = fluxer.Embed(title=display, color=0x5865F2)
-        embed.add_field(name="ID", value=str(uid), inline=True)
-        embed.add_field(name="Joined Server", value=joined_at[:10] if joined_at != "Unknown" else joined_at, inline=True)
-        avatar_hash = user.get("avatar")
-        if avatar_hash:
-            embed.set_thumbnail(url=f"{CDN_BASE}/avatars/{uid}/{avatar_hash}.png")
+    @Cog.command(name="userinfo")  
+    async def userinfo(self, ctx, target: str = None):  
+        if not ctx.guild:  
+            await ctx.channel.send("Use this command inside a server.")  
+            return  
+        uid = _parse_id(target) if target else ctx.author.id  
+        try:  
+            member = await self.bot._http.get_guild_member(ctx.guild.id, uid)  
+        except fluxer.FluxerException:  
+            await ctx.channel.send("Could not find that member.")  
+            return  
+        user = member.get("user", {})  
+        from fluxer import User  
+        user_obj = User.from_data(user)  
+        username = user_obj.username  
+        discriminator = user_obj.discriminator or "0"  
+        joined_at = member.get("joined_at", "Unknown")  
+        display = f"{username}#{discriminator}" if discriminator != "0" else username  
+        embed = fluxer.Embed(title=display, color=0x5865F2)  
+        embed.add_field(name="ID", value=str(uid), inline=True)  
+        embed.add_field(name="Joined Server", value=joined_at[:10] if joined_at != "Unknown" else joined_at, inline=True)  
+        url = user_obj.avatar_url or user_obj.default_avatar_url  
+        embed.set_thumbnail(url=url)  
+      
         await ctx.channel.send(embed=embed)
 
     # -------------------------------------------------------------------------
     # avatar  -- show full-size avatar for a user
     # -------------------------------------------------------------------------
     @Cog.command(name="avatar")
-    async def avatar(self, ctx, target: str = None):
-        if not ctx.guild:
-            await ctx.channel.send("Use this command inside a server.")
-            return
-        uid = _parse_id(target) if target else ctx.author.id
-        try:
-            member = await self.bot.http.get_guild_member(ctx.guild.id, uid)
-        except fluxer.FluxerException:
-            await ctx.channel.send("Could not find that member.")
-            return
+    async def avatar(self, ctx, target: str = None):  
+        if not ctx.guild:  
+            await ctx.channel.send("Use this command inside a server.")  
+            return  
+        uid = _parse_id(target) if target else ctx.author.id  
+        try:  
+            member = await self.bot._http.get_guild_member(ctx.guild.id, uid)  
+        except fluxer.FluxerException:  
+            await ctx.channel.send("Could not find that member.")  
+            return  
         user = member.get("user", {})
-        avatar_hash = user.get("avatar")
-        if not avatar_hash:
-            await ctx.channel.send(f"<@{uid}> has no avatar set.")
-            return
-        url = f"{CDN_BASE}/avatars/{uid}/{avatar_hash}.png?size=512"
-        embed = fluxer.Embed(color=0x5865F2)
-        embed.set_author(name=user.get("username", str(uid)))
-        embed.set_image(url=url)
+        from fluxer import User  
+        user_obj = User.from_data(user)
+        url = user_obj.avatar_url or user_obj.default_avatar_url 
+        embed = fluxer.Embed(color=0x5865F2)  
+        embed.set_author(name=user_obj.display_name)  
+        embed.set_image(url=url)  
         await ctx.channel.send(embed=embed)
 
     # -------------------------------------------------------------------------
