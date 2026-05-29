@@ -32,7 +32,7 @@ def _parse_id(raw: str) -> int:
 class Moderation(Cog):
     def __init__(self, bot: fluxer.Bot):
         self.bot = bot
-        super().__init__()
+        super().__init__(bot)
 
     # -------------------------------------------------------------------------
     # kick
