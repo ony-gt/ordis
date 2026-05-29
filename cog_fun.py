@@ -34,7 +34,7 @@ BALL_RESPONSES = [
 class Fun(Cog):
     def __init__(self, bot: fluxer.Bot):
         self.bot = bot
-        super().__init__()
+        super().__init__(bot)
 
     # -------------------------------------------------------------------------
     # 8ball
