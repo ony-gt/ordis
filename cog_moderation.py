@@ -246,7 +246,7 @@ class Moderation(Cog):
                 break  
       
         if not current_overwrite:  
-            await ctx.reply("🔓 Channel was not locked.")  
+            await ctx.reply("Channel was not locked.")  
             return  
 
         current_deny = int(current_overwrite["deny"])  
